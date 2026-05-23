@@ -3,11 +3,6 @@ name: 01 - 🎯 دانلود یوتیوب
 on:
   workflow_dispatch:
     inputs:
-      activation_key:
-        description: '🔑 کدفعالسازی (یکبار در ابتدا ) اگر ندارید از اینجا بگیرید : pay.avasam.ir/link/769604'
-        required: false
-        default: ''
-        type: string
       video_urls:
         description: '🔗 لینک ویدیو ( چند لینک با فاصله )'
         required: true
@@ -37,186 +32,8 @@ on:
         type: string
 
 jobs:
-  check-activation:
-    name: "🔍 بررسی فعالسازی"
-    runs-on: ubuntu-latest
-    outputs:
-      is_activated: ${{ steps.check.outputs.is_activated }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore activation cache
-        id: cache-activation
-        uses: actions/cache@v4
-        with:
-          path: .activation-status
-          key: activation-status-yt-${{ github.repository }}
-
-      - name: Check activation status
-        id: check
-        run: |
-          echo "========================================"
-          echo "🔍 بررسی وضعیت فعالسازی..."
-          echo "========================================"
-          if [ -f ".activation-status/act.txt" ]; then
-            ACT_STATUS=$(cat .activation-status/act.txt 2>/dev/null || echo "")
-            if [ "$ACT_STATUS" = "1" ]; then
-              echo "is_activated=true" >> $GITHUB_OUTPUT
-              echo "✅ وضعیت: فعال شده"
-              echo "🎉 دانلودر شما فعال است!"
-            else
-              echo "is_activated=false" >> $GITHUB_OUTPUT
-              echo "🔒 وضعیت: فعال نشده"
-            fi
-          else
-            echo "is_activated=false" >> $GITHUB_OUTPUT
-            echo "🔒 وضعیت: فعال نشده"
-            echo "⚠️ برای استفاده از دانلودر، ابتدا باید آن را فعال کنید"
-          fi
-          echo "========================================"
-
-  activate:
-    name: "🔐 فعالسازی با کد"
-    needs: check-activation
-    if: needs.check-activation.outputs.is_activated == 'false' && github.event.inputs.activation_key != ''
-    runs-on: ubuntu-latest
-    outputs:
-      just_activated: ${{ steps.validate.outputs.valid }}
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fetch and validate activation code
-        id: validate
-        run: |
-          INPUT_CODE="${{ github.event.inputs.activation_key }}"
-          KEYS_URL="https://raw.githubusercontent.com/keepfiless/activate/refs/heads/main/checklist/yt.txt"
-
-          echo "========================================"
-          echo "🔐 در حال بررسی کد فعالسازی..."
-          echo "========================================"
-          echo ""
-          echo "📥 دریافت لیست کدهای معتبر..."
-          curl -sL "$KEYS_URL" | tr -d '\r' | grep -v '^$' > /tmp/raw_codes.txt
-
-          # Extract last 4 characters of each valid code
-          > /tmp/valid_codes.txt
-          while IFS= read -r code; do
-            code=$(echo "$code" | tr -d '[:space:]')
-            [ -z "$code" ] && continue
-            if [ ${#code} -gt 4 ]; then
-              echo "${code: -4}" >> /tmp/valid_codes.txt
-            else
-              echo "$code" >> /tmp/valid_codes.txt
-            fi
-          done < /tmp/raw_codes.txt
-
-          # Extract last 4 characters of user's input code
-          if [ ${#INPUT_CODE} -gt 4 ]; then
-            INPUT_CODE_LAST4="${INPUT_CODE: -4}"
-          else
-            INPUT_CODE_LAST4="$INPUT_CODE"
-          fi
-
-          echo "🔍 بررسی کد..."
-
-          if grep -qx "$INPUT_CODE_LAST4" /tmp/valid_codes.txt; then
-            echo ""
-            echo "✅ کد فعالسازی معتبر است!"
-            echo "🎊 تبریک! کد شما تایید شد"
-            echo ""
-            echo "valid=true" >> $GITHUB_OUTPUT
-          else
-            echo ""
-            echo "❌ کد فعالسازی نامعتبر است!"
-            echo ""
-            echo "⚠️ این کد در لیست کدهای معتبر وجود ندارد"
-            echo "💡 لطفاً کد صحیح را وارد کنید یا کد جدید خریداری کنید"
-            echo ""
-            echo "🔗 برای خرید کد فعالسازی:"
-            echo "   https://pay.avasam.ir/link/769604"
-            echo ""
-            echo "valid=false" >> $GITHUB_OUTPUT
-          fi
-          echo "========================================"
-
-      - name: Fail on invalid code
-        if: steps.validate.outputs.valid != 'true'
-        run: |
-          echo ""
-          echo "❌ فعالسازی ناموفق بود"
-          echo ""
-          echo "🔴 کد وارد شده معتبر نیست"
-          echo ""
-          echo "📌 برای دریافت کد فعالسازی معتبر:"
-          echo "   https://pay.avasam.ir/link/769604"
-          echo ""
-          exit 1
-
-      - name: Save activation to cache
-        if: steps.validate.outputs.valid == 'true'
-        run: |
-          echo "💾 در حال ذخیره وضعیت فعالسازی در کش..."
-          mkdir -p .activation-status
-          echo "1" > .activation-status/act.txt
-          echo "activated_at=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> .activation-status/info.txt
-          echo "activated_by=${{ github.actor }}" >> .activation-status/info.txt
-          echo "✅ فعالسازی ذخیره شد"
-
-      - name: Cache activation status
-        if: steps.validate.outputs.valid == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: .activation-status
-          key: activation-status-yt-${{ github.repository }}
-
-      - name: Activation success message
-        if: steps.validate.outputs.valid == 'true'
-        run: |
-          echo ""
-          echo "========================================"
-          echo "🎉 فعالسازی با موفقیت انجام شد!"
-          echo "========================================"
-          echo ""
-          echo "✅ دانلودر شما اکنون فعال است"
-          echo "📥 در حال ادامه دانلود..."
-          echo ""
-          echo "========================================"
-
-  not-activated:
-    name: "⚠️ نیاز به فعالسازی"
-    needs: check-activation
-    if: needs.check-activation.outputs.is_activated == 'false' && github.event.inputs.activation_key == ''
-    runs-on: ubuntu-latest
-    steps:
-      - name: Show activation required
-        run: |
-          echo ""
-          echo "========================================"
-          echo "🔒 فعالسازی مورد نیاز است"
-          echo "========================================"
-          echo ""
-          echo "⚠️ این دانلودر هنوز فعال نشده است"
-          echo ""
-          echo "📌 برای فعالسازی دائمی:"
-          echo "   1️⃣ به لینک زیر بروید و پرداخت کنید:"
-          echo "      https://pay.avasam.ir/link/769604"
-          echo ""
-          echo "   2️⃣ کد فعالسازی را دریافت کنید"
-          echo ""
-          echo "   3️⃣ workflow را دوباره اجرا کنید"
-          echo "      و کد را در فیلد 'کد فعالسازی' وارد کنید"
-          echo ""
-          echo "========================================"
-          exit 1
-
   get-video:
     name: "📥 دانلود ویدیو"
-    needs: [check-activation, activate]
-    if: always() && !cancelled() && (needs.check-activation.outputs.is_activated == 'true' || needs.activate.outputs.just_activated == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -465,7 +282,6 @@ jobs:
                   printf '%s\n' "# ${FILENAME_NO_EXT}"
                   printf '%s\n' ""
 
-                  # Add thumbnail if it exists (width=250)
                   if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                     THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                     THUMB_RAW_LINK="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -552,7 +368,6 @@ jobs:
                     printf '%s\n' "# ${FILENAME_NO_EXT}"
                     printf '%s\n' ""
 
-                    # Add thumbnail if it exists (width=250)
                     if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                       THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                       THUMB_RAW_LINK="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -619,7 +434,6 @@ jobs:
                     printf '%s\n' "# ${FILENAME_NO_EXT}"
                     printf '%s\n' ""
 
-                    # Add thumbnail if it exists (width=250)
                     if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                       THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                       THUMB_RAW_LINK="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -649,302 +463,224 @@ jobs:
                     printf '%s\n' "---"
                     printf '%s\n' ""
                     printf '%s\n' "## Download Link"
-                    printf '%s\n' ""
-                    printf '%s\n' "| # | File | Link |"
+                    printf '%s\n'
+                                        printf '%s\n' "| # | File | Link |"
                     printf '%s\n' "|---|------|------|"
                     printf '%s\n' "| 1 | \`${FINAL_FOLDER_NAME}.${EXT}\` | [Download](${RAW_LINK}) |"
                     printf '%s\n' ""
                     printf '%s\n' "---"
                     printf '%s\n' ""
-                    printf '%s\n' "Ready to use — no extraction needed!"
+                    printf '%s\n' "## How to Play"
+                    printf '%s\n' ""
+                    printf '%s\n' "| OS | Player |"
+                    printf '%s\n' "|----|--------|"
+                    printf '%s\n' "| **Windows** | [VLC](https://www.videolan.org/) or Windows Media Player |"
+                    printf '%s\n' "| **Mac** | [IINA](https://iina.io/) or QuickTime |"
+                    printf '%s\n' "| **Linux** | VLC or MPV |"
+                    printf '%s\n' "| **Android** | [VLC for Android](https://play.google.com/store/apps/details?id=org.videolan.vlc) |"
                     printf '%s\n' ""
                     printf '%s\n' "---"
                     printf '%s\n' ""
                     printf '%s\n' "*This tool created by [avasam.ir](https://avasam.ir)*"
                   } > "$README_FILE"
 
-                  echo "Copied file and created README.md"
+                  echo "Created README.md"
                 fi
               fi
             done
+
             rm -rf "$TMP_DIR"
           done
+
           echo "$BACKUP_DIR" > /tmp/backup_dir_path.txt
-          echo "REPO_OWNER_ENV=${REPO_OWNER_ENV}" > /tmp/env_vars.txt
-          echo "REPO_NAME_ENV=${REPO_NAME_ENV}" >> /tmp/env_vars.txt
-          echo "BRANCH_ENV=${BRANCH_ENV}" >> /tmp/env_vars.txt
-          printf "%s\n" "${URL_LIST[@]}" > /tmp/yt_urls.txt
+          echo "REPO_OWNER=$REPO_OWNER" > /tmp/env_vars.txt
+          echo "REPO_NAME=$REPO_NAME" >> /tmp/env_vars.txt
+          echo "BRANCH=$BRANCH" >> /tmp/env_vars.txt
+          echo "All downloads complete!"
 
       - name: Download Subtitles
         if: ${{ github.event.inputs.download_subtitles == 'true' }}
+        env:
+          YT_URLS: ${{ github.event.inputs.video_urls }}
         run: |
-          set +e
           BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
           source /tmp/env_vars.txt
-          REPO_OWNER=${REPO_OWNER_ENV}
-          REPO_NAME=${REPO_NAME_ENV}
-          BRANCH=${BRANCH_ENV}
-          mapfile -t URL_LIST < /tmp/yt_urls.txt
 
-          sub_download() {
-            local MODE=$1; local OUT="$2"; local SURL="$3";
-            local SUB_DIR=$(dirname "$OUT")
-            sub_count() { find "$SUB_DIR" -type f \( -name "*.vtt" -o -name "*.srt" \) 2>/dev/null | wc -l; }
-            fa_count()  { find "$SUB_DIR" -type f \( -name "*.fa.vtt" -o -name "*.fa.srt" \) 2>/dev/null | wc -l; }
-            en_count()  { find "$SUB_DIR" -type f \( -name "*.en.vtt" -o -name "*.en.srt" \) 2>/dev/null | wc -l; }
-            sub_flags() {
-              case $MODE in
-                all)        echo "--write-sub --sub-langs fa,en";;
-                fa-native)  echo "--write-sub --sub-langs fa";;
-                fa-auto)    echo "--write-auto-sub --sub-langs fa";;
-                en-auto)    echo "--write-auto-sub --sub-langs en";;
-                auto-both)  echo "--write-auto-sub --sub-langs en,fa";;
-              esac
-            }
-            SFLAGS=$(sub_flags)
-            COMMON_SUB="--sub-format vtt/srt/best --convert-subs vtt --skip-download --no-playlist --no-check-certificates --output ${OUT}"
-            for METHOD in 1 2 3 4 5 6 7 8; do
-              echo "  [subtitle] method $METHOD ..."
-              case $METHOD in
-                 1) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" --add-header "Accept-Language:en-US,en;q=0.9" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 2) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:npm --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" --add-header "Accept-Language:en-US,en;q=0.9" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 3) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=web,mweb,android_vr" --js-runtimes deno --remote-components ejs:github $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 4) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=mweb" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 5) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=android_vr" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 6) yt-dlp --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 7) yt-dlp --extractor-args "youtube:player_client=mweb" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-                 8) yt-dlp --proxy "socks5://127.0.0.1:1080" --extractor-args "youtube:player_client=android" --user-agent "Mozilla/5.0 (Linux; Android 12; SM-S906N Build/QP1A.190711.020) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36" $SFLAGS $COMMON_SUB "$SURL" 2>&1 || true;;
-              esac
-              if [ "$MODE" = "fa-native" ] || [ "$MODE" = "fa-auto" ]; then
-                [ "$(fa_count)" -gt 0 ] && { echo "  [subtitle] ✅ success with method $METHOD"; return 0; }
-              elif [ "$MODE" = "en-auto" ]; then
-                [ "$(en_count)" -gt 0 ] && { echo "  [subtitle] ✅ success with method $METHOD"; return 0; }
-              elif [ "$MODE" = "auto-both" ]; then
-                if [ "$(en_count)" -gt 0 ] && [ "$(fa_count)" -gt 0 ]; then
-                  echo "  [subtitle] ✅ success with method $METHOD (both en+fa downloaded)"; return 0;
-                fi
-              else
-                [ "$(sub_count)" -gt 0 ] && { echo "  [subtitle] ✅ success with method $METHOD"; return 0; }
-              fi
-              sleep 1
-            done
-            return 1
+          normalize_youtube_url() {
+            local INPUT_URL="$1"
+            if [[ "$INPUT_URL" =~ youtu\.be/([a-zA-Z0-9_-]+) ]]; then
+              VIDEO_ID="${BASH_REMATCH[1]}"; VIDEO_ID="${VIDEO_ID%%\?*}";
+              echo "https://www.youtube.com/watch?v=${VIDEO_ID}"
+            else
+              echo "$INPUT_URL"
+            fi
           }
-
-          URL_INDEX=0
-          while IFS='|' read -r ORIGINAL_NAME FOLDER_NAME; do
-            URL_INDEX=$((URL_INDEX + 1)); URL="${URL_LIST[$((URL_INDEX - 1))]}";
-            [ -z "$FOLDER_NAME" ] && continue
-            SUBTITLE_DIR="$BACKUP_DIR/${FOLDER_NAME}/subtitle"; mkdir -p "$SUBTITLE_DIR";
-            OUT_TMPL="${SUBTITLE_DIR}/%(title)s"
-            echo "Downloading subtitles for: $FOLDER_NAME"
-            sub_download "all" "$OUT_TMPL" "$URL" || true
-            EN_COUNT=$(find "$SUBTITLE_DIR" -type f \( -name "*.en.vtt" -o -name "*.en.srt" \) 2>/dev/null | wc -l)
-            FA_COUNT=$(find "$SUBTITLE_DIR" -type f \( -name "*.fa.vtt" -o -name "*.fa.srt" \) 2>/dev/null | wc -l)
-            if [ "$EN_COUNT" -eq 0 ] || [ "$FA_COUNT" -eq 0 ]; then
-              sub_download "auto-both" "$OUT_TMPL" "$URL" || true
-            fi
-            SUB_COUNT=$(find "$SUBTITLE_DIR" -type f 2>/dev/null | wc -l)
-            if [ "$SUB_COUNT" -eq 0 ]; then
-              echo "  (no subtitles available for this video)"
-              rmdir "$SUBTITLE_DIR" 2>/dev/null || true
-            else
-              echo ""
-              echo "→ Subtitle files downloaded ($SUB_COUNT file(s)):"
-              find "$SUBTITLE_DIR" -type f 2>/dev/null | while read -r SUB_FILE; do
-                echo "  • $(basename "$SUB_FILE")"
-              done
-
-              # Create subtitle.zip inside the video folder (not inside subtitle/)
-              ZIP_PATH="$BACKUP_DIR/${FOLDER_NAME}/subtitle.zip"
-              echo ""
-              echo "→ Zipping subtitles → subtitle.zip ..."
-
-              # Zip with error handling - don't fail if zip has issues
-              if (cd "$SUBTITLE_DIR" && zip -j "$ZIP_PATH" ./* 2>&1); then
-                rm -rf "$SUBTITLE_DIR"
-
-                if [ -f "$ZIP_PATH" ]; then
-                  ZIP_SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP_PATH" 2>/dev/null || echo 0) / 1024 / 1024" | bc 2>/dev/null || echo "0.00")
-                  echo "✅ subtitle.zip created (${ZIP_SIZE_MB} MB)"
-                else
-                  echo "⚠️  Failed to create subtitle.zip - continuing without subtitles"
-                  rm -rf "$SUBTITLE_DIR" 2>/dev/null || true
-                  continue
-                fi
-              else
-                echo "⚠️  Zip command failed - continuing without subtitles"
-                rm -rf "$SUBTITLE_DIR" 2>/dev/null || true
-                continue
-              fi
-
-              # Build the raw download link for subtitle.zip - with error handling
-              FOLDER_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$FOLDER_NAME" 2>/dev/null || echo "$FOLDER_NAME")
-              SUB_ZIP_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('subtitle.zip', safe=''))" 2>/dev/null || echo "subtitle.zip")
-              SUB_RAW_LINK="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/videos/${FOLDER_ENCODED}/${SUB_ZIP_ENCODED}"
-
-              # Patch the existing README.md — insert subtitle section after Video Information, before Download Links
-              README_FILE="$BACKUP_DIR/${FOLDER_NAME}/README.md"
-              if [ -f "$README_FILE" ]; then
-                # Write a temp file with the subtitle section
-                SUB_SECTION_FILE=$(mktemp 2>/dev/null || echo "/tmp/sub_section_$")
-                if [ -n "$SUB_SECTION_FILE" ]; then
-                  {
-                    printf '%s\n' ""
-                    printf '%s\n' "---"
-                    printf '%s\n' ""
-                    printf '%s\n' "## 🔤 Subtitles"
-                    printf '%s\n' ""
-                    printf '%s\n' "| # | File | Link |"
-                    printf '%s\n' "|---|------|------|"
-                    printf '%s\n' "| 1 | \`subtitle.zip\` | [Download](${SUB_RAW_LINK}) |"
-                    printf '%s\n' ""
-                    printf '%s\n' "> Contains all available subtitle languages. Extract to get \`.vtt\` files."
-                  } > "$SUB_SECTION_FILE" 2>/dev/null || true
-
-                  # Find line number of "## Download Link" section (works for both "## Download Links" and "## Download Link")
-                  DOWNLOAD_LINE=$(grep -n "^## Download Link" "$README_FILE" 2>/dev/null | head -1 | cut -d: -f1)
-                  if [ -n "$DOWNLOAD_LINE" ] && [ "$DOWNLOAD_LINE" -gt 0 ] 2>/dev/null; then
-                    # Find the "---" separator right before "## Download Link" (should be 2 lines before)
-                    INSERT_AT=$((DOWNLOAD_LINE - 2))
-                    if [ "$INSERT_AT" -lt 1 ]; then
-                      INSERT_AT=$((DOWNLOAD_LINE - 1))
-                    fi
-                    if head -n "$INSERT_AT" "$README_FILE" > "${README_FILE}.tmp" 2>/dev/null; then
-                      cat "$SUB_SECTION_FILE" >> "${README_FILE}.tmp" 2>/dev/null || true
-                      printf '\n' >> "${README_FILE}.tmp" 2>/dev/null || true
-                      tail -n "+$((INSERT_AT + 1))" "$README_FILE" >> "${README_FILE}.tmp" 2>/dev/null || true
-                      mv "${README_FILE}.tmp" "$README_FILE" 2>/dev/null && echo "README patched with subtitle section (after Video Information)." || echo "⚠️  README patch failed, but continuing..."
-                    fi
-                  else
-                    # Fallback: No "Download Link" section found — just append
-                    cat "$SUB_SECTION_FILE" >> "$README_FILE" 2>/dev/null && echo "README appended with subtitle download link." || echo "⚠️  README append failed, but continuing..."
-                  fi
-                  rm -f "$SUB_SECTION_FILE" 2>/dev/null || true
-                fi
-              fi
-            fi
-          done < /tmp/video_info.txt
-
-          echo ""
-          echo "Subtitle download phase complete."
-          echo "=== Final backup dir structure ==="
-          find "$BACKUP_DIR" -type f 2>/dev/null | sort || true
-
-          # Re-enable exit on error for subsequent steps
-          set -e
-
-          # Ensure this step always exits successfully, even if some subtitles failed
-          echo "✅ Subtitle step completed - any failures were handled gracefully"
-          exit 0
-
-      - name: Stop WARP Container
-        if: always()
-        run: |
-          docker stop warp || true
-          docker rm warp || true
-
-      - name: Incremental Commit & Push
-        run: |
-          BRANCH="${GITHUB_REF_NAME}"
-          source /tmp/env_vars.txt
-          REPO_OWNER=${REPO_OWNER_ENV}
-          REPO_NAME=${REPO_NAME_ENV}
-          BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
-
-          BACKUP_FILE_COUNT=$(find "$BACKUP_DIR" -type f 2>/dev/null | wc -l)
-          if [ "$BACKUP_FILE_COUNT" -eq 0 ]; then
-            echo "WARNING: No files in backup directory — all downloads may have failed."
-            echo "Ensuring videos/ folder exists in repository with a master README..."
-
-            git fetch origin "$BRANCH"
-            git reset --hard origin/"$BRANCH"
-
-            mkdir -p videos
-
-            if [ ! -f "videos/README.md" ]; then
-              {
-                echo "# DOWNLOADED VIDEOS LIST :"
-                echo ""
-                echo "----"
-                echo ""
-                echo "> No videos downloaded yet."
-              } > videos/README.md
-              git add -f videos/README.md
-              if ! git diff --cached --quiet; then
-                git commit -m "[AVASAM] Initialize videos folder [skip ci]"
-                PUSH_RETRY=0
-                while [ $PUSH_RETRY -lt 5 ]; do
-                  PUSH_RETRY=$((PUSH_RETRY + 1))
-                  if timeout 60 git push origin HEAD:"$BRANCH"; then
-                    echo "videos/ folder initialized and pushed."
-                    break
-                  else
-                    echo "Push failed, retry $PUSH_RETRY/5..."
-                    sleep 3
-                  fi
-                done
-              else
-                echo "videos/README.md already exists, nothing to push."
-              fi
-            else
-              echo "videos/ folder already exists in repository."
-            fi
-
-            echo "No video files to push. Exiting."
-            exit 0
-          fi
 
           urlencode() {
             python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
           }
 
-          regenerate_master_readme() {
-            MASTER_README="videos/README.md"
-            { echo "# DOWNLOADED VIDEOS LIST :"; echo ""; echo "----"; echo ""; } > "$MASTER_README"
-            NUM=0
-            for folder in videos/*/; do
-              [ -d "$folder" ] || continue
-              FOLDER_NAME=$(basename "$folder")
-              [ -f "$folder/README.md" ] || continue
-              NUM=$((NUM + 1))
-              FOLDER_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$FOLDER_NAME")
-              FOLDER_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/videos/${FOLDER_ENCODED}"
-              printf -- "- %s - 🎬 [%s](%s)\n" "$NUM" "$FOLDER_NAME" "$FOLDER_LINK" >> "$MASTER_README"
-            done
-          }
+          read -ra URL_LIST <<< "$YT_URLS"
+          VIDEO_INFO_FILE="/tmp/video_info.txt"
 
-          git fetch origin "$BRANCH"
-          git reset --hard origin/"$BRANCH"
-          mkdir -p videos
-          cp -r "$BACKUP_DIR"/* videos/
+          URL_INDEX=0
+          while IFS='|' read -r ORIG_NAME FOLDER_NAME; do
+            URL_INDEX=$((URL_INDEX + 1))
+            URL="${URL_LIST[$((URL_INDEX - 1))]}"
+            URL=$(normalize_youtube_url "$URL")
+            echo "Downloading subtitles for: $ORIG_NAME"
 
-          git add -f videos/
-          regenerate_master_readme
-          git add -f videos/README.md
+            SUB_TMP="/tmp/subs_${URL_INDEX}"
+            mkdir -p "$SUB_TMP"
+            SUB_FOUND=false
 
-          if ! git diff --cached --quiet; then
-            git commit -m "[AVASAM] YouTube download [skip ci]"
-            PUSH_RETRY=0
-            while [ $PUSH_RETRY -lt 10 ]; do
-              PUSH_RETRY=$((PUSH_RETRY + 1))
-              if timeout 300 git push origin HEAD:"$BRANCH"; then
-                echo "Push successful!"
+            for METHOD in 1 2 3 4; do
+              echo "Subtitle method $METHOD..."
+              case $METHOD in
+                1) yt-dlp --proxy "socks5://127.0.0.1:1080" \
+                     --skip-download --write-subs --write-auto-subs \
+                     --sub-langs "fa,en" --sub-format "vtt/srt/best" \
+                     --convert-subs vtt \
+                     --output "${SUB_TMP}/%(title)s.%(ext)s" \
+                     --no-playlist "$URL" 2>/dev/null || true;;
+                2) yt-dlp --proxy "socks5://127.0.0.1:1080" \
+                     --skip-download --write-subs --write-auto-subs \
+                     --sub-langs "fa.*,en.*" --sub-format "vtt/srt/best" \
+                     --convert-subs vtt \
+                     --output "${SUB_TMP}/%(title)s.%(ext)s" \
+                     --extractor-args "youtube:player_client=mweb" \
+                     --no-playlist "$URL" 2>/dev/null || true;;
+                3) yt-dlp \
+                     --skip-download --write-subs --write-auto-subs \
+                     --sub-langs "fa,en" --sub-format "vtt/srt/best" \
+                     --convert-subs vtt \
+                     --output "${SUB_TMP}/%(title)s.%(ext)s" \
+                     --no-playlist "$URL" 2>/dev/null || true;;
+                4) yt-dlp --proxy "socks5://127.0.0.1:1080" \
+                     --skip-download --write-subs --write-auto-subs \
+                     --sub-langs "all" --sub-format "vtt/srt/best" \
+                     --convert-subs vtt \
+                     --output "${SUB_TMP}/%(title)s.%(ext)s" \
+                     --no-playlist "$URL" 2>/dev/null || true;;
+              esac
+
+              SUB_COUNT=$(find "$SUB_TMP" -name "*.vtt" 2>/dev/null | wc -l)
+              if [ "$SUB_COUNT" -gt 0 ]; then
+                echo "Found $SUB_COUNT subtitle file(s) with method $METHOD"
+                SUB_FOUND=true
                 break
-              else
-                echo "Push failed, retry $PUSH_RETRY/10..."
-                sleep 5
-                git fetch origin "$BRANCH"
-                git reset --hard origin/"$BRANCH"
-                cp -r "$BACKUP_DIR"/* videos/
-                git add -f videos/
-                regenerate_master_readme
-                git add -f videos/README.md
-                git diff --cached --quiet || git commit -m "[AVASAM] YouTube download [skip ci]"
               fi
             done
+
+            if [ "$SUB_FOUND" = true ]; then
+              TARGET_DIR="$BACKUP_DIR/${FOLDER_NAME}"
+              mkdir -p "$TARGET_DIR"
+              zip -j "${TARGET_DIR}/subtitle.zip" "$SUB_TMP"/*.vtt
+              echo "Created subtitle.zip in $TARGET_DIR"
+
+              FOLDER_ENCODED=$(urlencode "${FOLDER_NAME}")
+              SUB_ENCODED=$(urlencode "subtitle.zip")
+              SUB_RAW_LINK="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/videos/${FOLDER_ENCODED}/${SUB_ENCODED}"
+
+              README_FILE="$TARGET_DIR/README.md"
+              SUB_SECTION=$(printf '\n## 🔤 Subtitles\n\n| Language | File | Link |\n|----------|------|------|\n| **FA / EN** | `subtitle.zip` | [Download](%s) |\n' "$SUB_RAW_LINK")
+
+              if grep -q "## How to" "$README_FILE" 2>/dev/null; then
+                BEFORE=$(sed '/## How to/,$d' "$README_FILE")
+                AFTER=$(sed -n '/## How to/,$p' "$README_FILE")
+                printf '%s\n%s\n%s\n' "$BEFORE" "$SUB_SECTION" "$AFTER" > "$README_FILE"
+              else
+                printf '%s\n' "$SUB_SECTION" >> "$README_FILE"
+              fi
+
+              echo "Patched README.md with subtitle section"
+            else
+              echo "No subtitles found for: $ORIG_NAME"
+            fi
+
+            rm -rf "$SUB_TMP"
+          done < "$VIDEO_INFO_FILE"
+
+      - name: Stop WARP Container
+        if: always()
+        run: |
+          docker stop warp 2>/dev/null || true
+          docker rm warp 2>/dev/null || true
+          docker network rm warp-net 2>/dev/null || true
+          echo "WARP container stopped and removed."
+
+      - name: Incremental Commit & Push
+        run: |
+          source /tmp/env_vars.txt
+          BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
+
+          git fetch origin "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+
+          mkdir -p videos
+
+          if [ -d "$BACKUP_DIR" ] && [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
+            cp -r "$BACKUP_DIR"/. videos/
+            echo "Copied downloaded files to videos/"
           fi
-          echo "=========================================="
-          echo "All files pushed successfully!"
-          echo "made in AVASAM (https://avasam.ir)"
-          echo "=========================================="
+
+          # Regenerate master README
+          MASTER_README="videos/README.md"
+          {
+            printf '%s\n' "# 📹 Downloaded Videos"
+            printf '%s\n' ""
+            printf '%s\n' "| # | Video | Folder | Link |"
+            printf '%s\n' "|---|-------|--------|------|"
+            IDX=0
+            for DIR in videos/*/; do
+              [ -d "$DIR" ] || continue
+              DNAME=$(basename "$DIR")
+              [ "$DNAME" = "README.md" ] && continue
+              IDX=$((IDX + 1))
+              DNAME_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DNAME")
+              printf '| %s | `%s` | [Open Folder](videos/%s) | [README](videos/%s/README.md) |\n' \
+                "$IDX" "$DNAME" "$DNAME_ENCODED" "$DNAME_ENCODED"
+            done
+            printf '%s\n' ""
+            printf '%s\n' "---"
+            printf '%s\n' "*Auto-generated by [avasam.ir](https://avasam.ir)*"
+          } > "$MASTER_README"
+
+          git add videos/ "$MASTER_README"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            if [ ! -f videos/README.md ]; then
+              mkdir -p videos
+              printf '# 📹 Downloaded Videos\n\nNo videos yet.\n' > videos/README.md
+              git add videos/README.md
+              git commit -m "[AVASAM] Initialize videos folder [skip ci]"
+              git push origin "$BRANCH"
+            fi
+            exit 0
+          fi
+
+          git commit -m "[AVASAM] YouTube download [skip ci]"
+
+          PUSH_SUCCESS=false
+          for ATTEMPT in $(seq 1 10); do
+            echo "Push attempt $ATTEMPT/10..."
+            if timeout 300 git push origin "$BRANCH"; then
+              PUSH_SUCCESS=true
+              echo "Push successful!"
+              break
+            else
+              echo "Push failed, fetching latest and retrying..."
+              git fetch origin "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+              cp -r "$BACKUP_DIR"/. videos/ 2>/dev/null || true
+              git add videos/ "$MASTER_README"
+              git diff --cached --quiet || git commit -m "[AVASAM] YouTube download [skip ci]"
+              sleep $((ATTEMPT * 3))
+            fi
+          done
+
+          if [ "$PUSH_SUCCESS" = false ]; then
+            echo "❌ All push attempts failed!"
+            exit 1
+          fi
